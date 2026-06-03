@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Traffic Risk Dashboard v2</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0e17; --surface: #111827; --surface2: #1a2235;
+    --border: rgba(255,255,255,0.08); --text: #e8edf5; --muted: #8896b0;
+    --red: #ef4444; --amber: #f59e0b; --green: #22c55e; --accent: #3b82f6;
+    --role-accent: #3b82f6;
+    --font: 'DM Sans', sans-serif; --mono: 'Space Mono', monospace;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+
+  /* ── LOGIN ── */
+  #login-screen { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:9999; }
+  .login-card { width:440px; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:48px 40px; text-align:center; box-shadow:0 24px 64px rgba(0,0,0,0.5); }
+  .login-gov-logo { width:60px; height:60px; border-radius:50%; background:rgba(59,130,246,0.15); border:2px solid rgba(59,130,246,0.4); display:flex; align-items:center; justify-content:center; font-size:26px; margin:0 auto 16px; }
+  .login-badge { display:inline-flex; align-items:center; gap:8px; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3); color:#60a5fa; font-size:10px; font-family:var(--mono); padding:4px 14px; border-radius:20px; margin-bottom:20px; letter-spacing:.1em; text-transform:uppercase; }
+  .login-title { font-size:22px; font-weight:600; margin-bottom:6px; }
+  .login-sub { font-size:12px; color:var(--muted); margin-bottom:24px; line-height:1.7; }
+  .login-divider { height:1px; background:var(--border); margin-bottom:22px; }
+  .login-field { margin-bottom:14px; text-align:left; }
+  .login-field-label { display:block; font-size:10px; font-family:var(--mono); letter-spacing:.08em; color:var(--muted); text-transform:uppercase; margin-bottom:6px; }
+  .login-card input { width:100%; padding:12px 16px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--mono); font-size:13px; outline:none; transition:border-color .2s; }
+  .login-card input:focus { border-color:var(--accent); }
+  .login-card input::placeholder { color:var(--muted); }
+  .login-card input.input-error { border-color:var(--red) !important; }
+  .login-error-msg { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:8px; padding:10px 14px; font-size:12px; color:var(--red); margin-bottom:14px; text-align:left; display:none; }
+  .login-error-msg.visible { display:block; }
+  .login-btn { width:100%; padding:13px; background:var(--accent); border:none; border-radius:8px; color:#fff; font-family:var(--font); font-size:14px; font-weight:600; cursor:pointer; margin-top:4px; transition:all .2s; letter-spacing:.02em; }
+  .login-btn:hover { background:#2563eb; }
+  .login-hint { background:rgba(59,130,246,0.07); border:1px solid rgba(59,130,246,0.15); border-radius:8px; padding:12px 14px; margin-top:20px; text-align:left; }
+  .login-hint-title { font-size:10px; font-family:var(--mono); color:#60a5fa; letter-spacing:.08em; text-transform:uppercase; margin-bottom:8px; }
+  .login-hint-row { font-size:11px; color:var(--muted); font-family:var(--mono); margin-bottom:3px; }
+  .login-hint-row span { color:var(--text); }
+  .login-footer { font-size:10px; color:var(--muted); margin-top:20px; letter-spacing:.03em; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)} }
+  .shake { animation:shake .35s ease; }
+
+  /* ── DASHBOARD SHELL ── */
+  #dashboard { display:none; height:100vh; flex-direction:column; }
+  #dashboard.visible { display:flex; }
+  header { height:56px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 20px; gap:16px; flex-shrink:0; }
+  .header-logo { font-family:var(--mono); font-size:13px; font-weight:700; color:var(--role-accent); letter-spacing:.05em; }
+  .header-sep { width:1px; height:20px; background:var(--border); }
+  .header-title { font-size:13px; color:var(--muted); flex:1; }
+  .role-badge { font-size:10px; font-family:var(--mono); padding:3px 10px; border-radius:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+  .role-badge.officer  { background:rgba(239,68,68,0.15);   color:var(--red); }
+  .role-badge.analyst  { background:rgba(168,85,247,0.15);  color:#a855f7; }
+  .role-badge.authority{ background:rgba(245,158,11,0.15);  color:var(--amber); }
+  .header-user { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); }
+  .user-dot { width:28px; height:28px; border-radius:50%; background:rgba(59,130,246,0.2); border:1px solid rgba(59,130,246,0.4); display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--accent); font-weight:600; }
+  .logout-btn { padding:5px 12px; background:transparent; border:1px solid var(--border); border-radius:6px; color:var(--muted); font-size:11px; cursor:pointer; font-family:var(--font); transition:all .2s; }
+  .logout-btn:hover { border-color:var(--red); color:var(--red); }
+  .main { display:flex; flex:1; overflow:hidden; }
+
+  /* ── SIDEBAR ── */
+  aside { width:300px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; overflow-y:auto; }
+  .sidebar-section { padding:16px; border-bottom:1px solid var(--border); }
+  .sidebar-label { font-size:10px; font-family:var(--mono); letter-spacing:.1em; color:var(--muted); text-transform:uppercase; margin-bottom:12px; }
+  .legend-item { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .legend-text { font-size:12px; color:var(--muted); }
+  .legend-range { font-family:var(--mono); font-size:11px; color:var(--muted); margin-left:auto; }
+  .risk-item { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); cursor:pointer; }
+  .risk-item:last-child { border-bottom:none; }
+  .risk-item:hover { opacity:.8; }
+  .risk-rank { font-family:var(--mono); font-size:11px; color:var(--muted); width:16px; }
+  .risk-info { flex:1; min-width:0; }
+  .risk-name { font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .risk-factor { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .risk-score-badge { font-family:var(--mono); font-size:12px; font-weight:700; padding:3px 8px; border-radius:6px; flex-shrink:0; }
+  .badge-high   { background:rgba(239,68,68,0.15);  color:var(--red); }
+  .badge-medium { background:rgba(245,158,11,0.15); color:var(--amber); }
+  .badge-low    { background:rgba(34,197,94,0.15);  color:var(--green); }
+  .stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .stat-card { background:var(--surface2); border-radius:8px; padding:10px 12px; }
+  .stat-value { font-family:var(--mono); font-size:18px; font-weight:700; }
+  .stat-label { font-size:10px; color:var(--muted); margin-top:2px; }
+  .stat-high { color:var(--red); } .stat-med { color:var(--amber); } .stat-low { color:var(--green); } .stat-total { color:var(--accent); }
+
+  /* Role-specific sidebar panels */
+  .role-panel { padding:14px 16px; border-bottom:1px solid var(--border); }
+  .role-panel-title { font-size:10px; font-family:var(--mono); letter-spacing:.1em; color:var(--muted); text-transform:uppercase; margin-bottom:10px; }
+
+  /* Officer — deployment checklist */
+  .deploy-item { display:flex; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px solid rgba(255,255,255,0.04); font-size:12px; cursor:pointer; border-radius:4px; transition:background .15s; }
+  .deploy-item:last-child { border-bottom:none; }
+  .deploy-item:hover { background:rgba(255,255,255,0.04); }
+  .deploy-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; transition:background .3s; }
+  .deploy-zone { flex:1; color:var(--text); }
+  .deploy-action { font-size:10px; font-family:var(--mono); font-weight:700; padding:2px 6px; border-radius:4px; transition:all .25s; }
+  .deploy-action.state-deploy  { color:var(--red);   background:rgba(239,68,68,0.12); }
+  .deploy-action.state-monitor { color:var(--amber); background:rgba(245,158,11,0.12); }
+  .deploy-action.state-done    { color:var(--green); background:rgba(34,197,94,0.15); }
+  .deploy-action.state-watching{ color:#60a5fa;      background:rgba(59,130,246,0.12); }
+  /* Toast */
+  #deploy-toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:13px 22px; font-size:12px; font-family:var(--mono); z-index:9999; opacity:0; transition:all .35s cubic-bezier(.34,1.56,.64,1); pointer-events:none; min-width:320px; text-align:center; box-shadow:0 8px 32px rgba(0,0,0,.4); }
+  #deploy-toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+  #deploy-toast.t-deploy  { border-color:rgba(34,197,94,0.5);  color:var(--green); }
+  #deploy-toast.t-monitor { border-color:rgba(59,130,246,0.5); color:#60a5fa; }
+  .shift-box { background:rgba(239,68,68,0.07); border:1px solid rgba(239,68,68,0.2); border-radius:8px; padding:10px 12px; margin-top:2px; }
+  .shift-title { font-size:10px; font-family:var(--mono); color:var(--red); letter-spacing:.08em; margin-bottom:6px; }
+  .shift-val { font-family:var(--mono); font-size:20px; font-weight:700; color:var(--text); }
+  .shift-sub { font-size:10px; color:var(--muted); margin-top:2px; }
+
+  /* Analyst — trend bars */
+  .trend-row { margin-bottom:10px; }
+  .trend-label { display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px; }
+  .trend-label span:first-child { color:var(--muted); }
+  .trend-label span:last-child { font-family:var(--mono); color:#a855f7; font-weight:700; }
+  .trend-bar-bg { height:6px; background:rgba(255,255,255,0.06); border-radius:3px; }
+  .trend-bar-fill { height:6px; background:linear-gradient(90deg,#7c3aed,#a855f7); border-radius:3px; transition:width .6s ease; }
+  .infra-note { background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.2); border-radius:8px; padding:10px 12px; font-size:11px; color:#c4b5fd; line-height:1.6; margin-top:2px; }
+  .infra-note strong { color:#e9d5ff; }
+
+  /* Authority — KPI cards */
+  .kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .kpi-card { background:var(--surface2); border-radius:8px; padding:12px; text-align:center; }
+  .kpi-val { font-family:var(--mono); font-size:22px; font-weight:700; margin-bottom:2px; }
+  .kpi-label { font-size:10px; color:var(--muted); }
+  .perf-row { display:flex; align-items:center; justify-content:space-between; padding:7px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:12px; }
+  .perf-row:last-child { border-bottom:none; }
+  .perf-metric { color:var(--muted); }
+  .perf-val { font-family:var(--mono); font-weight:700; }
+
+  /* ── MAP ── */
+  .map-wrapper { flex:1; position:relative; }
+  #map { width:100%; height:100%; }
+  .leaflet-container { background:#0d1420 !important; }
+  .custom-marker { border-radius:50%; border:2px solid rgba(255,255,255,0.25); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:10px; font-weight:700; color:#fff; cursor:pointer; }
+  .marker-high   { background:rgba(239,68,68,0.9);  box-shadow:0 0 12px rgba(239,68,68,0.5); }
+  .marker-medium { background:rgba(245,158,11,0.9); box-shadow:0 0 12px rgba(245,158,11,0.4); }
+  .marker-low    { background:rgba(34,197,94,0.9);  box-shadow:0 0 12px rgba(34,197,94,0.3); }
+  .map-ts { position:absolute; top:12px; left:12px; z-index:999; background:rgba(10,14,23,0.85); border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:var(--mono); font-size:10px; color:var(--muted); }
+  .ts-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); margin-right:6px; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+
+  /* ── DETAIL PANEL (shared base) ── */
+  #detail-panel { position:absolute; bottom:20px; right:20px; width:310px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; z-index:1000; display:none; animation:slideUp .25s ease; }
+  #detail-panel.visible { display:block; }
+  @keyframes slideUp { from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)} }
+  .detail-close { position:absolute; top:12px; right:12px; background:none; border:none; color:var(--muted); cursor:pointer; font-size:16px; }
+  .detail-location { font-size:11px; color:var(--muted); margin-bottom:4px; }
+  .detail-name { font-size:14px; font-weight:600; margin-bottom:14px; line-height:1.3; }
+  .detail-score-row { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+  .detail-score-big { font-family:var(--mono); font-size:40px; font-weight:700; line-height:1; }
+  .detail-level { display:flex; flex-direction:column; gap:4px; }
+  .detail-badge { font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px; text-transform:uppercase; letter-spacing:.06em; }
+  .detail-sub { font-size:11px; color:var(--muted); }
+  .detail-divider { height:1px; background:var(--border); margin:12px 0; }
+  .detail-row { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; gap:12px; }
+  .detail-key { font-size:11px; color:var(--muted); flex-shrink:0; }
+  .detail-val { font-size:12px; font-weight:500; text-align:right; }
+  .detail-factor { font-size:12px; color:var(--amber); text-align:right; }
+
+  /* Officer detail extra */
+  .deploy-btn { width:100%; margin-top:12px; padding:9px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); border-radius:8px; color:var(--red); font-family:var(--mono); font-size:11px; font-weight:700; cursor:pointer; transition:all .2s; letter-spacing:.05em; }
+  .deploy-btn:hover { background:rgba(239,68,68,0.25); }
+
+  /* Analyst detail extra */
+  .trend-section { margin-top:12px; }
+  .trend-mini-label { font-size:10px; font-family:var(--mono); color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; }
+  .trend-mini-bars { display:flex; align-items:flex-end; gap:3px; height:40px; }
+  .trend-mini-bar { flex:1; border-radius:2px 2px 0 0; background:linear-gradient(180deg,#7c3aed,#a855f7); opacity:.7; transition:opacity .2s; }
+  .trend-mini-bar:hover { opacity:1; }
+  .infra-rec { margin-top:10px; background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.2); border-radius:8px; padding:9px 12px; font-size:11px; color:#c4b5fd; line-height:1.6; }
+  .infra-rec strong { color:#e9d5ff; }
+
+  /* Authority detail extra */
+  .auth-summary { margin-top:12px; background:rgba(245,158,11,0.07); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:10px 12px; }
+  .auth-summary-title { font-size:10px; font-family:var(--mono); color:var(--amber); letter-spacing:.08em; text-transform:uppercase; margin-bottom:6px; }
+  .auth-summary-text { font-size:11px; color:#fcd34d; line-height:1.6; }
+
+  /* ── API INSPECTOR ── */
+  #api-panel { position:absolute; top:12px; right:12px; width:320px; background:rgba(10,14,23,0.97); border:1px solid rgba(59,130,246,0.3); border-radius:12px; z-index:1001; font-family:var(--mono); font-size:11px; overflow:hidden; }
+  .api-header { background:rgba(59,130,246,0.15); border-bottom:1px solid rgba(59,130,246,0.2); padding:10px 14px; display:flex; align-items:center; justify-content:space-between; }
+  .api-title { color:#60a5fa; font-weight:700; font-size:11px; letter-spacing:.05em; }
+  .api-status { font-size:10px; padding:2px 8px; border-radius:10px; }
+  .api-status.idle    { background:rgba(136,150,176,0.2); color:var(--muted); }
+  .api-status.loading { background:rgba(245,158,11,0.2);  color:var(--amber); }
+  .api-status.success { background:rgba(34,197,94,0.2);   color:var(--green); }
+  .api-status.error   { background:rgba(239,68,68,0.2);   color:var(--red); }
+  .api-body { padding:12px 14px; max-height:340px; overflow-y:auto; }
+  .api-step { margin-bottom:12px; }
+  .api-step-label { font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+  .api-step-label span { color:#60a5fa; }
+  .api-url-box { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:8px 10px; word-break:break-all; line-height:1.5; color:#a5f3fc; }
+  .api-url-method { color:#f472b6; margin-right:6px; }
+  .api-url-base { color:#a5f3fc; }
+  .api-url-param { color:#86efac; }
+  .api-url-key { color:#fbbf24; }
+  .api-arrow { text-align:center; color:var(--muted); font-size:14px; margin:4px 0; }
+  .api-response-box { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:8px 10px; line-height:1.6; max-height:120px; overflow-y:auto; }
+  .json-key { color:#93c5fd; } .json-str { color:#86efac; } .json-num { color:#fbbf24; } .json-bool { color:#f472b6; }
+  .api-explain { background:rgba(59,130,246,0.07); border:1px solid rgba(59,130,246,0.15); border-radius:6px; padding:8px 10px; color:#94a3b8; line-height:1.5; font-size:10px; }
+  .api-explain strong { color:#e2e8f0; }
+  .api-fetch-btn { width:100%; padding:8px; background:rgba(59,130,246,0.2); border:1px solid rgba(59,130,246,0.4); border-radius:6px; color:#60a5fa; font-family:var(--mono); font-size:11px; cursor:pointer; transition:all .2s; margin-top:4px; }
+  .api-fetch-btn:hover { background:rgba(59,130,246,0.3); }
+  .api-key-input { width:100%; padding:7px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:var(--mono); font-size:11px; outline:none; margin-bottom:8px; transition:border-color .2s; }
+  .api-key-input:focus { border-color:var(--accent); }
+  .api-key-input::placeholder { color:var(--muted); }
+  .api-note { font-size:9px; color:var(--muted); margin-top:6px; line-height:1.5; }
+  .api-note a { color:#60a5fa; }
+
+  /* ── TOMTOM PANEL ── */
+  #tomtom-panel { position:absolute; top:12px; left:12px; width:300px; background:rgba(10,14,23,0.97); border:1px solid rgba(239,68,68,0.3); border-radius:12px; z-index:1001; font-family:var(--mono); font-size:11px; overflow:hidden; }
+  .tt-header { background:rgba(239,68,68,0.15); border-bottom:1px solid rgba(239,68,68,0.2); padding:10px 14px; display:flex; align-items:center; justify-content:space-between; }
+  .tt-title { color:#f87171; font-weight:700; font-size:11px; letter-spacing:.05em; }
+  .tt-status { font-size:10px; padding:2px 8px; border-radius:10px; }
+  .tt-status.idle    { background:rgba(136,150,176,0.2); color:var(--muted); }
+  .tt-status.loading { background:rgba(245,158,11,0.2);  color:var(--amber); }
+  .tt-status.success { background:rgba(34,197,94,0.2);   color:var(--green); }
+  .tt-status.error   { background:rgba(239,68,68,0.2);   color:var(--red); }
+  .tt-body { padding:12px 14px; max-height:360px; overflow-y:auto; }
+  .tt-explain { background:rgba(239,68,68,0.07); border:1px solid rgba(239,68,68,0.15); border-radius:6px; padding:8px 10px; color:#94a3b8; line-height:1.5; font-size:10px; margin-bottom:10px; }
+  .tt-explain strong { color:#e2e8f0; }
+  .tt-fetch-btn { width:100%; padding:8px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.4); border-radius:6px; color:#f87171; font-family:var(--mono); font-size:11px; cursor:pointer; transition:all .2s; margin-top:4px; }
+  .tt-fetch-btn:hover { background:rgba(239,68,68,0.3); }
+  .tt-select { width:100%; padding:7px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:var(--mono); font-size:11px; outline:none; margin-bottom:8px; cursor:pointer; }
+  .tt-url-box { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:8px 10px; word-break:break-all; line-height:1.5; color:#a5f3fc; margin-bottom:8px; }
+  .tt-response-box { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:8px 10px; line-height:1.6; max-height:130px; overflow-y:auto; margin-bottom:8px; }
+  .tt-result-box { background:rgba(239,68,68,0.07); border:1px solid rgba(239,68,68,0.15); border-radius:6px; padding:8px 10px; color:#94a3b8; line-height:1.7; font-size:10px; }
+  .tt-step-label { font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+  .tt-step-label span { color:#f87171; }
+  .speed-bar-bg { height:8px; background:rgba(255,255,255,0.08); border-radius:4px; margin:6px 0 2px; }
+  .speed-bar-fill { height:8px; border-radius:4px; transition:width .6s ease; }
+
+  /* Live TomTom sidebar strip */
+  #tomtom-strip { display:none; }
+  .tt-congestion-indicator { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); }
+  .tt-congestion-indicator:last-child { border-bottom:none; }
+  .tt-loc-name { font-size:11px; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tt-speed-val { font-family:var(--mono); font-size:11px; font-weight:700; }
+</style>
+</head>
+<body>
+
+<!-- ═══ LOGIN ═══ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-gov-logo">🏛️</div>
+    <div class="login-badge">🔒 London City Authority</div>
+    <div class="login-title">Traffic Risk Dashboard</div>
+    <div class="login-sub">AI-Based Smart Traffic & Accident Prediction System<br>Authorised Personnel Access Only — v2.0</div>
+    <div class="login-divider"></div>
+    <div id="login-error" class="login-error-msg">⚠ Invalid Employee ID or Password. Access denied.</div>
+    <div class="login-field">
+      <label class="login-field-label">Employee ID</label>
+      <input type="text" id="emp-id" placeholder="e.g. LCA-2024-001" autocomplete="off" />
+    </div>
+    <div class="login-field">
+      <label class="login-field-label">Password</label>
+      <input type="password" id="emp-pass" placeholder="Enter your password" />
+    </div>
+    <button class="login-btn" onclick="doLogin()">🔓 Authenticate & Access</button>
+    <div class="login-hint">
+      <div class="login-hint-title">📋 Demo Credentials</div>
+      <div class="login-hint-row">ID: <span>LCA-2024-001</span> | Pass: <span>officer123</span> — Traffic Control Officer</div>
+      <div class="login-hint-row">ID: <span>LCA-2024-002</span> | Pass: <span>analyst456</span> — Urban Planning Analyst</div>
+      <div class="login-hint-row">ID: <span>LCA-2024-003</span> | Pass: <span>manager789</span> — City Traffic Authority</div>
+      <div class="login-hint-row">ID: <span>LCA-2024-004</span> | Pass: <span>analyst321</span> — Urban Planning Analyst</div>
+      <div class="login-hint-row">ID: <span>LCA-2024-005</span> | Pass: <span>ctrl654</span> — Traffic Control Officer</div>
+    </div>
+    <div class="login-footer">🔐 Secured System — Unauthorised access is a criminal offence</div>
+  </div>
+</div>
+
+<!-- ═══ DASHBOARD ═══ -->
+<div id="dashboard">
+  <header>
+    <span class="header-logo" id="header-logo">SMART TRAFFIC</span>
+    <div class="header-sep"></div>
+    <span class="header-title" id="header-title">Traffic Risk Map — Lahore City</span>
+    <span class="role-badge" id="role-badge"></span>
+    <div class="header-user">
+      <div class="user-dot" id="user-initials">TC</div>
+      <span id="user-label">Officer</span>
+    </div>
+    <button class="logout-btn" onclick="doLogout()">Logout</button>
+  </header>
+
+  <div class="main">
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+
+      <!-- Legend — shown to all roles -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">Risk Level Legend</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--red);box-shadow:0 0 6px rgba(239,68,68,.5)"></div><span class="legend-text">High Risk</span><span class="legend-range">70–100</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--amber);box-shadow:0 0 6px rgba(245,158,11,.4)"></div><span class="legend-text">Medium Risk</span><span class="legend-range">40–69</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--green);box-shadow:0 0 6px rgba(34,197,94,.3)"></div><span class="legend-text">Low Risk</span><span class="legend-range">0–39</span></div>
+      </div>
+
+      <!-- Live Weather — shown to all -->
+      <div class="sidebar-section" id="weather-strip" style="display:none">
+        <div class="sidebar-label">Live Location Weather <span style="color:var(--green)">● API</span></div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:6px" id="w-loc-name">—</div>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-value" id="w-temp" style="color:#60a5fa">--</div><div class="stat-label">Temperature °C</div></div>
+          <div class="stat-card"><div class="stat-value" id="w-humid" style="color:#a78bfa">--</div><div class="stat-label">Humidity %</div></div>
+          <div class="stat-card"><div class="stat-value" id="w-wind" style="color:#34d399">--</div><div class="stat-label">Wind km/h</div></div>
+          <div class="stat-card"><div class="stat-value" id="w-cond" style="color:var(--amber); font-size:12px">--</div><div class="stat-label">Condition</div></div>
+        </div>
+        <div style="font-size:10px; color:var(--muted); margin-top:8px; font-family:var(--mono)">⚠ Rain/fog boosts that zone's risk score by +10</div>
+      </div>
+
+      <!-- Live TomTom Traffic — shown to all after fetch -->
+      <div class="sidebar-section" id="tomtom-strip">
+        <div class="sidebar-label">Live Traffic Speed <span style="color:var(--red)">● TomTom</span></div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:8px" id="tt-loc-name">—</div>
+        <div class="stats-grid" style="margin-bottom:8px">
+          <div class="stat-card"><div class="stat-value" id="tt-current-speed" style="color:var(--red)">--</div><div class="stat-label">Current km/h</div></div>
+          <div class="stat-card"><div class="stat-value" id="tt-free-speed" style="color:var(--green)">--</div><div class="stat-label">Free Flow km/h</div></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Congestion Level</div>
+        <div class="speed-bar-bg"><div class="speed-bar-fill" id="tt-congestion-bar" style="width:0%;background:var(--red)"></div></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;font-family:var(--mono)" id="tt-congestion-label">—</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px;font-family:var(--mono)" id="tt-boost-note"></div>
+      </div>
+
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">City Overview</div>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-value stat-high" id="s-high">3</div><div class="stat-label">High Risk Zones</div></div>
+          <div class="stat-card"><div class="stat-value stat-med"  id="s-med">4</div><div class="stat-label">Medium Risk</div></div>
+          <div class="stat-card"><div class="stat-value stat-low"  id="s-low">3</div><div class="stat-label">Low Risk</div></div>
+          <div class="stat-card"><div class="stat-value stat-total" id="s-acc">71</div><div class="stat-label">Monthly Accidents</div></div>
+        </div>
+      </div>
+
+      <!-- Top Risk List — shown to all -->
+      <div class="sidebar-section">
+        <div class="sidebar-label" id="risk-list-label">Top 5 Highest Risk</div>
+        <div id="risk-list"></div>
+      </div>
+
+      <!-- ── OFFICER PANEL ── -->
+      <div class="role-panel" id="panel-officer" style="display:none">
+        <div class="role-panel-title">🚨 Shift Deployment Status</div>
+        <div class="shift-box">
+          <div class="shift-title">CURRENT SHIFT</div>
+          <div class="shift-val" id="shift-time">--:--</div>
+          <div class="shift-sub" id="shift-label">Loading shift info...</div>
+        </div>
+        <div style="margin-top:12px" id="deploy-list">
+          <div class="deploy-item" data-loc="0"><div class="deploy-dot" style="background:var(--red)"></div><div class="deploy-zone">Oxford Street — Central</div><div class="deploy-action" id="da-0">DEPLOY NOW</div></div>
+          <div class="deploy-item" data-loc="1"><div class="deploy-dot" style="background:var(--red)"></div><div class="deploy-zone">London Bridge — Borough</div><div class="deploy-action" id="da-1">DEPLOY NOW</div></div>
+          <div class="deploy-item" data-loc="2"><div class="deploy-dot" style="background:var(--amber)"></div><div class="deploy-zone">A406 North Circular</div><div class="deploy-action" id="da-2">MONITOR</div></div>
+          <div class="deploy-item" data-loc="3"><div class="deploy-dot" style="background:var(--amber)"></div><div class="deploy-zone">Elephant & Castle</div><div class="deploy-action" id="da-3">MONITOR</div></div>
+        </div>
+        <div id="deploy-log-box" style="margin-top:10px;display:none">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">📋 Deployment Log</div>
+          <div id="deploy-log" style="font-size:10px;font-family:var(--mono);color:var(--green);line-height:1.8;max-height:90px;overflow-y:auto"></div>
+        </div>
+      </div>
+
+      <!-- ── ANALYST PANEL ── -->
+      <div class="role-panel" id="panel-analyst" style="display:none">
+        <div class="role-panel-title">📊 12-Month Accident Trend</div>
+        <div class="trend-row"><div class="trend-label"><span>Oxford Street</span><span>+18%</span></div><div class="trend-bar-bg"><div class="trend-bar-fill" style="width:91%"></div></div></div>
+        <div class="trend-row"><div class="trend-label"><span>London Bridge</span><span>+12%</span></div><div class="trend-bar-bg"><div class="trend-bar-fill" style="width:85%"></div></div></div>
+        <div class="trend-row"><div class="trend-label"><span>A406 North Circular</span><span>+7%</span></div><div class="trend-bar-bg"><div class="trend-bar-fill" style="width:78%"></div></div></div>
+        <div class="trend-row"><div class="trend-label"><span>Elephant & Castle</span><span>stable</span></div><div class="trend-bar-bg"><div class="trend-bar-fill" style="width:64%"></div></div></div>
+        <div class="trend-row"><div class="trend-label"><span>M25 — Heathrow Spur</span><span>-3%</span></div><div class="trend-bar-bg"><div class="trend-bar-fill" style="width:61%"></div></div></div>
+        <div class="infra-note" style="margin-top:10px">
+          <strong>Recommendation:</strong> Signal redesign at Oxford Street intersection estimated to reduce risk score by 15–20 points based on similar interventions at Kensington High St.
+        </div>
+      </div>
+
+      <!-- ── AUTHORITY PANEL ── -->
+      <div class="role-panel" id="panel-authority" style="display:none">
+        <div class="role-panel-title">📋 Performance Overview</div>
+        <div class="kpi-grid">
+          <div class="kpi-card"><div class="kpi-val" style="color:var(--green)">↓8%</div><div class="kpi-label">Accident Rate (MoM)</div></div>
+          <div class="kpi-card"><div class="kpi-val" style="color:var(--amber)">71</div><div class="kpi-label">Incidents This Month</div></div>
+          <div class="kpi-card"><div class="kpi-val" style="color:var(--red)">3</div><div class="kpi-label">Critical Zones</div></div>
+          <div class="kpi-card"><div class="kpi-val" style="color:var(--accent)">99.2%</div><div class="kpi-label">System Uptime</div></div>
+        </div>
+        <div style="margin-top:12px">
+          <div class="perf-row"><span class="perf-metric">Response Time Avg</span><span class="perf-val" style="color:var(--green)">4.2 min</span></div>
+          <div class="perf-row"><span class="perf-metric">Officers Deployed</span><span class="perf-val" style="color:var(--accent)">24 / 30</span></div>
+          <div class="perf-row"><span class="perf-metric">Data Last Synced</span><span class="perf-val" style="color:var(--muted)" id="auth-sync-time">--</span></div>
+          <div class="perf-row"><span class="perf-metric">Budget Utilisation</span><span class="perf-val" style="color:var(--amber)">68%</span></div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- MAP -->
+    <div class="map-wrapper">
+      <div class="map-ts"><span class="ts-dot"></span>Last updated: <span id="ts-time"></span></div>
+      <div id="map"></div>
+
+      <!-- API INSPECTOR -->
+      <div id="api-panel">
+        <div class="api-header">
+          <span class="api-title">⚡ LIVE API INSPECTOR</span>
+          <span class="api-status idle" id="api-status">IDLE</span>
+        </div>
+        <div class="api-body">
+          <div class="api-step">
+            <div class="api-step-label">What is an API?</div>
+            <div class="api-explain">
+              <strong>API = Application Programming Interface</strong><br><br>
+              Your app asks a server for data using a special URL called an <strong>endpoint</strong>.
+              The server sends back structured data (JSON).<br><br>
+              📡 <strong>Here:</strong> We call OpenWeatherMap's API using each location's <em>exact GPS coordinates</em> (lat/lon), so each zone gets its own live weather — not just one generic city result.
+            </div>
+          </div>
+          <div class="api-step" id="step-key">
+            <div class="api-step-label"><span>Step 1</span> — Enter Your API Key</div>
+            <input class="api-key-input" id="api-key-input" placeholder="Paste OpenWeatherMap API key..." />
+            <div class="api-step-label" style="margin-top:8px"><span>Step 2</span> — Choose Location</div>
+            <select class="api-key-input" id="api-loc-select" style="margin-bottom:8px;cursor:pointer">
+              <option value="">— Select a location —</option>
+            </select>
+            <button class="api-fetch-btn" onclick="callWeatherAPI()">🚀 Call the API Now</button>
+            <div class="api-note">Free key → <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a><br>Sign up → My API Keys → copy key.<br>⚠ New keys take <strong style="color:var(--amber)">10–15 min to activate</strong>.</div>
+          </div>
+          <div class="api-step" id="step-request" style="display:none">
+            <div class="api-step-label"><span>Step 2</span> — HTTP Request Sent</div>
+            <div class="api-url-box" id="req-display"></div>
+          </div>
+          <div class="api-step" id="step-response" style="display:none">
+            <div class="api-step-label"><span>Step 3</span> — Raw JSON Response</div>
+            <div class="api-response-box" id="res-display"></div>
+            <div class="api-arrow">↓ our app reads this ↓</div>
+          </div>
+          <div class="api-step" id="step-extracted" style="display:none">
+            <div class="api-step-label"><span>Step 4</span> — Data Extracted & Used</div>
+            <div class="api-explain" id="extracted-display"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TOMTOM TRAFFIC PANEL -->
+      <div id="tomtom-panel">
+        <div class="tt-header">
+          <span class="tt-title">🚗 LIVE TRAFFIC INSPECTOR</span>
+          <span class="tt-status idle" id="tt-status">IDLE</span>
+        </div>
+        <div class="tt-body">
+          <div class="tt-explain">
+            <strong>TomTom Traffic Flow API</strong><br><br>
+            Fetches <strong>real-time traffic speed</strong> for any GPS point in the world. We compare <em>current speed</em> vs <em>free-flow speed</em> to calculate live congestion — and boost the risk score if traffic is severely congested.<br><br>
+            🚗 <strong>Here:</strong> Each London location is fetched by its exact lat/lon coordinates.
+          </div>
+          <div class="tt-step-label"><span>Step 1</span> — Choose Location</div>
+          <select class="tt-select" id="tt-loc-select">
+            <option value="">— Select a location —</option>
+          </select>
+          <button class="tt-fetch-btn" onclick="callTomTomAPI()">🚦 Fetch Real Traffic Data</button>
+
+          <div id="tt-step-request" style="display:none;margin-top:10px">
+            <div class="tt-step-label"><span>Step 2</span> — HTTP Request Sent</div>
+            <div class="tt-url-box" id="tt-req-display"></div>
+          </div>
+          <div id="tt-step-response" style="display:none">
+            <div class="tt-step-label"><span>Step 3</span> — Raw JSON Response</div>
+            <div class="tt-response-box" id="tt-res-display"></div>
+            <div class="api-arrow">↓ our app reads this ↓</div>
+          </div>
+          <div id="tt-step-extracted" style="display:none">
+            <div class="tt-step-label"><span>Step 4</span> — Data Extracted & Used</div>
+            <div class="tt-result-box" id="tt-extracted-display"></div>
+          </div>
+        </div>
+      </div>
+
+
+      <div id="detail-panel">
+        <button class="detail-close" onclick="closeDetail()">✕</button>
+        <div class="detail-location" id="d-zone"></div>
+        <div class="detail-name" id="d-name"></div>
+        <div class="detail-score-row">
+          <div class="detail-score-big" id="d-score"></div>
+          <div class="detail-level">
+            <div class="detail-badge" id="d-badge"></div>
+            <div class="detail-sub">Risk Score / 100</div>
+          </div>
+        </div>
+        <div class="detail-divider"></div>
+        <div class="detail-row"><span class="detail-key">Primary Factor</span><span class="detail-factor" id="d-factor"></span></div>
+        <div class="detail-row"><span class="detail-key">Accidents (30 days)</span><span class="detail-val" id="d-accidents"></span></div>
+        <div class="detail-row"><span class="detail-key">Congestion Level</span><span class="detail-val" id="d-congestion"></span></div>
+        <div class="detail-row"><span class="detail-key">Peak Hour</span><span class="detail-val" id="d-peak"></span></div>
+        <div class="detail-row" id="d-weather-row" style="display:none"><span class="detail-key">Weather Boost</span><span class="detail-val" style="color:var(--amber)" id="d-weather-boost"></span></div>
+        <div class="detail-row" id="d-tomtom-row" style="display:none"><span class="detail-key">Live Traffic Speed</span><span class="detail-val" style="color:var(--red)" id="d-tomtom-speed"></span></div>
+
+        <!-- Officer-only: Deploy button -->
+        <div id="detail-officer-extra" style="display:none">
+          <button class="deploy-btn" onclick="handleDeploy()">🚨 LOG DEPLOYMENT REQUEST FOR THIS ZONE</button>
+        </div>
+
+        <!-- Analyst-only: Mini trend + infrastructure note -->
+        <div id="detail-analyst-extra" style="display:none">
+          <div class="trend-section">
+            <div class="trend-mini-label">Accident Trend (Last 6 Months)</div>
+            <div class="trend-mini-bars" id="trend-mini-bars"></div>
+          </div>
+          <div class="infra-rec" id="infra-rec"></div>
+        </div>
+
+        <!-- Authority-only: Executive summary box -->
+        <div id="detail-authority-extra" style="display:none">
+          <div class="auth-summary">
+            <div class="auth-summary-title">📋 Management Note</div>
+            <div class="auth-summary-text" id="auth-summary-text"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Deploy Toast -->
+<div id="deploy-toast"></div>
+
+<script>
+// ── DATA ──
+const baseLocations = [
+  { id:"LOC-001", name:"Oxford Street — Central London",         zone:"Zone A — Central",  lat:51.5154, lng:-0.1417, riskScore:91, accidents:18, congestion:"Severe",   peak:"07:30–10:00", factor:"High pedestrian density + bus conflicts",  trend:[12,13,14,15,16,18], infra:"Recommend signal timing overhaul and pedestrian crossing redesign. Similar intervention at Victoria reduced risk by 18 points." },
+  { id:"LOC-002", name:"London Bridge — Borough High St",        zone:"Zone B — South",    lat:51.5055, lng:-0.0873, riskScore:85, accidents:15, congestion:"Severe",   peak:"08:00–09:30", factor:"Merging lanes + high pedestrian flow",     trend:[9,10,11,12,14,15],  infra:"Priority: Widen pedestrian zone at north end. Estimated 20% reduction in incidents based on Waterloo bridge data." },
+  { id:"LOC-003", name:"A406 North Circular — Hanger Lane",     zone:"Zone C — West",     lat:51.5301, lng:-0.2988, riskScore:78, accidents:14, congestion:"High",     peak:"17:00–20:00", factor:"Over-capacity ring road junction",         trend:[10,11,11,12,13,14], infra:"Junction redesign proposed at gyratory. Would reduce bottleneck by distributing exit traffic." },
+  { id:"LOC-004", name:"Elephant & Castle Roundabout",          zone:"Zone A — Central",  lat:51.4943, lng:-0.1003, riskScore:64, accidents:10, congestion:"High",     peak:"09:00–11:00", factor:"Complex roundabout geometry",              trend:[8,9,9,10,10,10],    infra:"Roundabout redesign underway. Phase 2 signal upgrade expected to reduce incidents." },
+  { id:"LOC-005", name:"M25 — Junction 15 Heathrow Spur",       zone:"Zone D — SW",       lat:51.4769, lng:-0.4785, riskScore:61, accidents:9,  congestion:"Moderate", peak:"07:00–09:00", factor:"Heavy freight + airport traffic",          trend:[11,10,10,9,9,9],    infra:"Trend declining. Smart motorway monitoring showing results. Continue monitoring." },
+  { id:"LOC-006", name:"Edgware Road — Marylebone Flyover",     zone:"Zone E — NW",       lat:51.5237, lng:-0.1714, riskScore:55, accidents:7,  congestion:"Moderate", peak:"18:00–20:00", factor:"Unregulated lane changes",                 trend:[6,6,7,7,7,7],       infra:"Lane marking improvements estimated at low cost. High ROI on safety." },
+  { id:"LOC-007", name:"Canary Wharf — Aspen Way A1261",        zone:"Zone F — East",     lat:51.5051, lng:-0.0183, riskScore:48, accidents:6,  congestion:"Moderate", peak:"10:00–12:00", factor:"Financial district peak congestion",       trend:[5,5,6,6,6,6],       infra:"Congestion charge extension recommended. Low infrastructure cost." },
+  { id:"LOC-008", name:"Kensington High St — A315",             zone:"Zone G — SW",       lat:51.4994, lng:-0.1916, riskScore:32, accidents:3,  congestion:"Low",      peak:"08:30–09:30", factor:"Minor signal timing",                      trend:[6,5,4,4,3,3],       infra:"Trend improving. Recent signal upgrade working effectively. No further action required." },
+  { id:"LOC-009", name:"Richmond Road — Twickenham Bridge",     zone:"Zone H — SW",       lat:51.4613, lng:-0.3139, riskScore:24, accidents:2,  congestion:"Low",      peak:"06:00–07:30", factor:"Suburban bridge flow",                     trend:[3,3,2,2,2,2],       infra:"Stable and low risk. Bridge access control effective." },
+  { id:"LOC-010", name:"Hampstead Lane — North London",         zone:"Zone A — North",    lat:51.5719, lng:-0.1627, riskScore:19, accidents:2,  congestion:"Low",      peak:"07:00–08:00", factor:"Residential street, low volume",           trend:[2,2,2,2,2,2],       infra:"No infrastructure action required. Residential traffic management adequate." }
+];
+
+let locations = baseLocations.map(l => ({...l}));
+let weatherBoost = 0;
+let locationWeather = {}; // stores per-location weather results keyed by index
+let map, markers = [];
+let currentRole = '';
+
+// ── AUTH ──
+const VALID_USERS = {
+  'LCA-2024-001': { password:'officer123', name:'Traffic Officer',       role:'Traffic Control Officer', initials:'TO', roleKey:'officer'   },
+  'LCA-2024-002': { password:'analyst456', name:'Planning Analyst',      role:'Urban Planning Analyst',  initials:'PA', roleKey:'analyst'   },
+  'LCA-2024-003': { password:'manager789', name:'Authority Manager',     role:'City Traffic Authority',  initials:'AM', roleKey:'authority' },
+  'LCA-2024-004': { password:'analyst321', name:'Infrastructure Analyst',role:'Urban Planning Analyst',  initials:'IA', roleKey:'analyst'   },
+  'LCA-2024-005': { password:'ctrl654',    name:'Control Officer',       role:'Traffic Control Officer', initials:'CO', roleKey:'officer'   },
+};
+
+function doLogin() {
+  const id = document.getElementById('emp-id').value.trim();
+  const pw = document.getElementById('emp-pass').value.trim();
+  const errEl = document.getElementById('login-error');
+  const card  = document.querySelector('.login-card');
+  errEl.classList.remove('visible');
+  document.getElementById('emp-id').classList.remove('input-error');
+  document.getElementById('emp-pass').classList.remove('input-error');
+
+  if (!id || !pw) {
+    errEl.textContent = '⚠ Please enter both Employee ID and Password.';
+    errEl.classList.add('visible');
+    card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+    return;
+  }
+  const user = VALID_USERS[id];
+  if (!user || user.password !== pw) {
+    errEl.textContent = '⚠ Invalid Employee ID or Password. Access denied.';
+    errEl.classList.add('visible');
+    document.getElementById('emp-id').classList.add('input-error');
+    document.getElementById('emp-pass').classList.add('input-error');
+    document.getElementById('emp-pass').value = '';
+    card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+    return;
+  }
+
+  currentRole = user.roleKey;
+  applyRoleInterface(user);
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('dashboard').classList.add('visible');
+  setTimeout(() => { initMap(); initDeployButtons(); }, 100);
+  const now = new Date();
+  const ts = now.toLocaleString('en-PK', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  document.getElementById('ts-time').textContent = ts;
+  document.getElementById('auth-sync-time').textContent = ts;
+}
+
+function applyRoleInterface(user) {
+  // Hide all role panels first
+  ['panel-officer','panel-analyst','panel-authority'].forEach(id => document.getElementById(id).style.display = 'none');
+
+  // Set header info
+  document.getElementById('user-initials').textContent = user.initials;
+  document.getElementById('user-label').textContent = user.name;
+
+  const badge = document.getElementById('role-badge');
+  badge.textContent = user.role;
+
+  if (user.roleKey === 'officer') {
+    // Header accent: red for operational urgency
+    document.getElementById('header-logo').style.color = '#ef4444';
+    document.getElementById('header-title').textContent = 'Live Risk Map — Deploy & Monitor | London City';
+    badge.className = 'role-badge officer';
+    document.getElementById('panel-officer').style.display = 'block';
+    document.getElementById('risk-list-label').textContent = 'Top 5 — Priority Deployment Zones';
+    // Set shift time
+    const h = new Date().getHours();
+    const shiftName = h < 8 ? 'Night Shift (00:00–08:00)' : h < 16 ? 'Morning Shift (08:00–16:00)' : 'Evening Shift (16:00–00:00)';
+    document.getElementById('shift-time').textContent = new Date().toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('shift-label').textContent = shiftName;
+
+  } else if (user.roleKey === 'analyst') {
+    // Header accent: purple for analytical
+    document.getElementById('header-logo').style.color = '#a855f7';
+    document.getElementById('header-title').textContent = 'Accident Trend Analysis & Infrastructure Planning | London City';
+    badge.className = 'role-badge analyst';
+    document.getElementById('panel-analyst').style.display = 'block';
+    document.getElementById('risk-list-label').textContent = 'Top 5 — Locations Requiring Review';
+
+  } else if (user.roleKey === 'authority') {
+    // Header accent: amber for executive
+    document.getElementById('header-logo').style.color = '#f59e0b';
+    document.getElementById('header-title').textContent = 'City-Wide Road Safety Overview | London City Authority';
+    badge.className = 'role-badge authority';
+    document.getElementById('panel-authority').style.display = 'block';
+    document.getElementById('risk-list-label').textContent = 'Top 5 — Highest Risk Zones (Management View)';
+  }
+}
+
+function doLogout() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('dashboard').classList.remove('visible');
+  document.getElementById('emp-id').value = '';
+  document.getElementById('emp-pass').value = '';
+  document.getElementById('login-error').classList.remove('visible');
+  document.getElementById('header-logo').style.color = '#3b82f6';
+  currentRole = '';
+  closeDetail(); map = null; markers = [];
+}
+
+// ── MAP ──
+function getRiskLevel(score) { return score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low'; }
+
+function initMap() {
+  if (map) return;
+  map = L.map('map', {zoomControl:false, attributionControl:false}).setView([51.5074, -0.1278], 12);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {maxZoom:18}).addTo(map);
+  L.control.zoom({position:'bottomright'}).addTo(map);
+  renderMarkers();
+  buildRiskList();
+  // Populate location dropdown in API inspector
+  const sel = document.getElementById('api-loc-select');
+  sel.innerHTML = '<option value="">— Select a location —</option>';
+  baseLocations.forEach((loc, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = loc.name;
+    sel.appendChild(opt);
+  });
+  // Populate TomTom dropdown
+  const ttSel = document.getElementById('tt-loc-select');
+  ttSel.innerHTML = '<option value="">— Select a location —</option>';
+  baseLocations.forEach((loc, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = loc.name;
+    ttSel.appendChild(opt);
+  });
+}
+
+function renderMarkers() {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+  locations.forEach(loc => {
+    const level = getRiskLevel(loc.riskScore);
+    const size = level === 'high' ? 36 : level === 'medium' ? 30 : 24;
+    const icon = L.divIcon({
+      className:'',
+      html:`<div class="custom-marker marker-${level}" style="width:${size}px;height:${size}px;">${loc.riskScore}</div>`,
+      iconSize:[size,size], iconAnchor:[size/2,size/2]
+    });
+    const m = L.marker([loc.lat,loc.lng],{icon}).addTo(map);
+    m.on('click', () => showDetail(loc));
+    markers.push(m);
+  });
+}
+
+// ── RISK LIST ──
+function buildRiskList() {
+  const top5 = [...locations].sort((a,b) => b.riskScore - a.riskScore).slice(0,5);
+  const el = document.getElementById('risk-list');
+  el.innerHTML = '';
+  top5.forEach((loc,i) => {
+    const level = getRiskLevel(loc.riskScore);
+    const div = document.createElement('div');
+    div.className = 'risk-item';
+    div.innerHTML = `<span class="risk-rank">${i+1}</span><div class="risk-info"><div class="risk-name">${loc.name}</div><div class="risk-factor">${loc.factor}</div></div><span class="risk-score-badge badge-${level}">${loc.riskScore}</span>`;
+    div.addEventListener('click', () => { map.flyTo([loc.lat,loc.lng],14,{duration:1}); setTimeout(()=>showDetail(loc),600); });
+    el.appendChild(div);
+  });
+  const h  = locations.filter(l=>getRiskLevel(l.riskScore)==='high').length;
+  const m  = locations.filter(l=>getRiskLevel(l.riskScore)==='medium').length;
+  const lo = locations.filter(l=>getRiskLevel(l.riskScore)==='low').length;
+  document.getElementById('s-high').textContent = h;
+  document.getElementById('s-med').textContent  = m;
+  document.getElementById('s-low').textContent  = lo;
+}
+
+// ── DETAIL PANEL ──
+function showDetail(loc) {
+  const level   = getRiskLevel(loc.riskScore);
+  const color   = level==='high'?'var(--red)':level==='medium'?'var(--amber)':'var(--green)';
+  const badgeBg = level==='high'?'rgba(239,68,68,.15)':level==='medium'?'rgba(245,158,11,.15)':'rgba(34,197,94,.15)';
+
+  document.getElementById('d-zone').textContent      = loc.zone+' — '+loc.id;
+  document.getElementById('d-name').textContent      = loc.name;
+  document.getElementById('d-score').textContent     = loc.riskScore;
+  document.getElementById('d-score').style.color     = color;
+  document.getElementById('d-factor').textContent    = loc.factor;
+  document.getElementById('d-accidents').textContent = loc.accidents+' incidents';
+  document.getElementById('d-congestion').textContent= loc.congestion;
+  document.getElementById('d-peak').textContent      = loc.peak;
+  const badge = document.getElementById('d-badge');
+  badge.textContent  = level.toUpperCase()+' RISK';
+  badge.style.background = badgeBg;
+  badge.style.color  = color;
+
+  const wr = document.getElementById('d-weather-row');
+  if (weatherBoost > 0) { wr.style.display = 'flex'; document.getElementById('d-weather-boost').textContent = '+'+weatherBoost+' (rain/fog detected)'; }
+  else wr.style.display = 'none';
+
+  // Hide all role extras
+  document.getElementById('detail-officer-extra').style.display   = 'none';
+  document.getElementById('detail-analyst-extra').style.display   = 'none';
+  document.getElementById('detail-authority-extra').style.display = 'none';
+
+  // Show role-specific extras
+  if (currentRole === 'officer') {
+    document.getElementById('detail-officer-extra').style.display = 'block';
+
+  } else if (currentRole === 'analyst') {
+    document.getElementById('detail-analyst-extra').style.display = 'block';
+    // Draw mini trend bars
+    const bars = document.getElementById('trend-mini-bars');
+    bars.innerHTML = '';
+    const max = Math.max(...loc.trend);
+    loc.trend.forEach(v => {
+      const pct = Math.round((v/max)*100);
+      bars.innerHTML += `<div class="trend-mini-bar" style="height:${pct}%" title="${v} incidents"></div>`;
+    });
+    document.getElementById('infra-rec').innerHTML = `<strong>Infrastructure Note:</strong> ${loc.infra}`;
+
+  } else if (currentRole === 'authority') {
+    document.getElementById('detail-authority-extra').style.display = 'block';
+    const trend = loc.trend;
+    const change = trend[trend.length-1] - trend[0];
+    const direction = change > 0 ? `⬆ Up ${change} incidents` : change < 0 ? `⬇ Down ${Math.abs(change)} incidents` : '→ Stable';
+    document.getElementById('auth-summary-text').textContent =
+      `Risk Score: ${loc.riskScore}/100 (${level.toUpperCase()}). 6-month trend: ${direction}. Monthly incidents: ${loc.accidents}. Primary concern: ${loc.factor}. Recommend review at next authority meeting.`;
+  }
+
+  document.getElementById('detail-panel').classList.add('visible');
+}
+
+// ── DEPLOYMENT SYSTEM ──
+const deployState = { 0:'deploy', 1:'deploy', 2:'monitor', 3:'monitor' };
+// loc index → sidebar deploy-action element mapping
+const deployLocMap = { 0:0, 1:1, 2:2, 3:3 }; // sidebar index → baseLocations index
+
+let toastTimer = null;
+
+function showToast(msg, type) {
+  const t = document.getElementById('deploy-toast');
+  t.textContent = msg;
+  t.className = 'show ' + (type === 'deploy' ? 't-deploy' : 't-monitor');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 3200);
+}
+
+function triggerDeploy(sidebarIdx) {
+  const locIdx = sidebarIdx; // same index in baseLocations
+  const loc = baseLocations[locIdx];
+  const actionEl = document.getElementById('da-' + sidebarIdx);
+  const dotEl = actionEl.closest('.deploy-item').querySelector('.deploy-dot');
+  const state = deployState[sidebarIdx];
+  const now = new Date().toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit'});
+
+  if (state === 'deploy') {
+    // Mark as deployed
+    deployState[sidebarIdx] = 'deployed';
+    actionEl.textContent = '✓ DEPLOYED';
+    actionEl.className = 'deploy-action state-done';
+    dotEl.style.background = 'var(--green)';
+    logDeployEvent(`[${now}] 🚨 Officer deployed → ${loc.name}`);
+    showToast(`🚨 Officer deployed to ${loc.name}`, 'deploy');
+    // Fly map to this location and open detail panel
+    if (map) { map.flyTo([loc.lat, loc.lng], 14, {duration:1}); setTimeout(()=>showDetail(loc),700); }
+
+  } else if (state === 'monitor') {
+    // Mark as monitoring
+    deployState[sidebarIdx] = 'watching';
+    actionEl.textContent = '👁 WATCHING';
+    actionEl.className = 'deploy-action state-watching';
+    dotEl.style.background = '#3b82f6';
+    logDeployEvent(`[${now}] 👁 Monitoring active → ${loc.name}`);
+    showToast(`👁 Monitoring activated for ${loc.name}`, 'monitor');
+    if (map) { map.flyTo([loc.lat, loc.lng], 14, {duration:1}); setTimeout(()=>showDetail(loc),700); }
+
+  } else if (state === 'deployed' || state === 'watching') {
+    // Allow recall
+    const wasDeployed = state === 'deployed';
+    deployState[sidebarIdx] = wasDeployed ? 'deploy' : 'monitor';
+    actionEl.textContent = wasDeployed ? 'DEPLOY NOW' : 'MONITOR';
+    actionEl.className = 'deploy-action ' + (wasDeployed ? 'state-deploy' : 'state-monitor');
+    dotEl.style.background = wasDeployed ? 'var(--red)' : 'var(--amber)';
+    logDeployEvent(`[${now}] ↩ Recalled from ${loc.name}`);
+    showToast(`↩ Unit recalled from ${loc.name}`, wasDeployed ? 'deploy' : 'monitor');
+  }
+}
+
+function logDeployEvent(msg) {
+  const box = document.getElementById('deploy-log-box');
+  const log = document.getElementById('deploy-log');
+  box.style.display = 'block';
+  log.innerHTML += msg + '<br>';
+  log.scrollTop = log.scrollHeight;
+}
+
+// handleDeploy is called from the detail panel "MARK FOR OFFICER DEPLOYMENT" button
+function handleDeploy() {
+  // Find which location is currently open in the detail panel
+  const nameEl = document.getElementById('d-name');
+  const locName = nameEl ? nameEl.textContent : '';
+  const now = new Date().toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit'});
+  logDeployEvent(`[${now}] 🚨 Manual deploy request → ${locName}`);
+  showToast(`🚨 Deployment logged for ${locName}`, 'deploy');
+}
+
+function closeDetail() { document.getElementById('detail-panel').classList.remove('visible'); }
+
+// Wire up sidebar deploy items after DOM ready
+function initDeployButtons() {
+  document.querySelectorAll('#deploy-list .deploy-item').forEach((item) => {
+    const sIdx = parseInt(item.getAttribute('data-loc'));
+    // Set initial CSS classes
+    const actionEl = document.getElementById('da-' + sIdx);
+    if (actionEl) {
+      const st = deployState[sIdx];
+      actionEl.className = 'deploy-action ' + (st === 'deploy' ? 'state-deploy' : 'state-monitor');
+    }
+    item.addEventListener('click', () => triggerDeploy(sIdx));
+  });
+}
+
+// ── WEATHER API ──
+// Per-location weather: each location fetched by its own lat/lng coordinates
+async function callWeatherAPI() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key) { alert('Please enter your OpenWeatherMap API key first.'); return; }
+
+  const locSelect = document.getElementById('api-loc-select');
+  const locIdx = parseInt(locSelect.value);
+  if (isNaN(locIdx)) { alert('Please select a location from the dropdown.'); return; }
+
+  const chosenLoc = baseLocations[locIdx];
+  const lat = chosenLoc.lat;
+  const lng = chosenLoc.lng;
+
+  setStatus('loading','⏳ FETCHING');
+  const displayKey = key.length > 8 ? key.slice(0,4)+'...'+key.slice(-4) : '****';
+  // Use lat/lon — NOT a hardcoded city name — so every location gets unique weather
+  const directUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${key}&units=metric`;
+
+  document.getElementById('step-request').style.display = 'block';
+  document.getElementById('req-display').innerHTML =
+    `<span class="api-url-method">GET</span>`+
+    `<span class="api-url-base">api.openweathermap.org/data/2.5/weather</span><br>`+
+    `?<span class="api-url-param">lat</span>=<span class="json-num">${lat}</span><br>`+
+    `&<span class="api-url-param">lon</span>=<span class="json-num">${lng}</span><br>`+
+    `&<span class="api-url-param">appid</span>=<span class="api-url-key">${displayKey}</span><br>`+
+    `&<span class="api-url-param">units</span>=<span class="json-str">metric</span><br><br>`+
+    `<span style="color:var(--green);font-size:9px">📍 Fetching for: ${chosenLoc.name}</span><br>`+
+    `<span style="color:var(--muted);font-size:9px">✓ Using exact GPS coords — unique result per zone</span>`;
+
+  try {
+    const response = await fetch(directUrl);
+    const data = await response.json();
+    if (data.cod && data.cod !== 200 && data.cod !== '200') {
+      setStatus('error','✗ ERROR');
+      document.getElementById('step-response').style.display = 'block';
+      document.getElementById('res-display').innerHTML =
+        `<span style="color:var(--red)">${data.cod == 401 ? '401 Unauthorized — API key invalid or not yet activated. New keys take 10–15 min.' : data.cod+': '+data.message}</span>`;
+      return;
+    }
+    setStatus('success','✓ SUCCESS');
+    document.getElementById('step-response').style.display = 'block';
+    // Show response snippet: note data.name = nearest city OpenWeatherMap resolves for these coords
+    const snippet = { coords:{lat,lon:lng}, resolved_name:data.name, weather:[{main:data.weather[0].main,description:data.weather[0].description}], main:{temp:data.main.temp,humidity:data.main.humidity}, wind:{speed:data.wind.speed} };
+    document.getElementById('res-display').innerHTML = syntaxHighlight(JSON.stringify(snippet, null, 2));
+
+    const temp = Math.round(data.main.temp);
+    const humidity = data.main.humidity;
+    const windKmh = Math.round(data.wind.speed * 3.6);
+    const condition = data.weather[0].main;
+    const desc = data.weather[0].description;
+    const badWeather = ['Rain','Drizzle','Thunderstorm','Snow','Fog','Mist','Haze'].includes(condition);
+
+    // Store weather result per location index
+    locationWeather[locIdx] = { temp, humidity, windKmh, condition, desc, badWeather };
+
+    document.getElementById('step-extracted').style.display = 'block';
+    document.getElementById('extracted-display').innerHTML =
+      `<strong>📍 ${chosenLoc.name}</strong><br>`+
+      `<span style="color:var(--muted);font-size:9px">GPS: ${lat}, ${lng}</span><br><br>`+
+      `🌡 <strong>data.main.temp</strong> → ${temp}°C<br>`+
+      `💧 <strong>data.main.humidity</strong> → ${humidity}%<br>`+
+      `💨 <strong>data.wind.speed × 3.6</strong> → ${windKmh} km/h<br>`+
+      `🌤 <strong>data.weather[0].main</strong> → ${condition}<br><br>`+
+      (badWeather
+        ? `<strong style="color:var(--amber)">⚠ ${condition} detected → this zone's risk score +10</strong>`
+        : `<strong style="color:var(--green)">✓ Clear weather → no risk adjustment for this zone</strong>`);
+
+    // Update sidebar weather strip for this location
+    document.getElementById('w-loc-name').textContent = '📍 ' + chosenLoc.name;
+    document.getElementById('w-temp').textContent  = temp+'°';
+    document.getElementById('w-humid').textContent = humidity+'%';
+    document.getElementById('w-wind').textContent  = windKmh;
+    document.getElementById('w-cond').textContent  = desc;
+    document.getElementById('weather-strip').style.display = 'block';
+
+    // Apply weather boost ONLY to the selected location, not all zones
+    locations = baseLocations.map((l, i) => {
+      const w = locationWeather[i];
+      const boost = w && w.badWeather ? 10 : 0;
+      return {...l, riskScore: Math.min(100, l.riskScore + boost), weatherBoostApplied: boost};
+    });
+    // Global weatherBoost for the detail panel row (use selected location's boost)
+    weatherBoost = badWeather ? 10 : 0;
+    renderMarkers();
+    buildRiskList();
+
+    // Fly map to the selected location
+    map.flyTo([chosenLoc.lat, chosenLoc.lng], 14, {duration: 1});
+
+  } catch(err) {
+    setStatus('error','✗ FAILED');
+    document.getElementById('step-response').style.display = 'block';
+    document.getElementById('res-display').innerHTML = `<span style="color:var(--red)">Network error: ${err.message}</span>`;
+  }
+}
+
+function setStatus(cls, text) {
+  const el = document.getElementById('api-status');
+  el.className = 'api-status '+cls;
+  el.textContent = text;
+}
+
+function syntaxHighlight(json) {
+  return json.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+      let cls = 'json-num';
+      if (/^"/.test(match)) { cls = /:$/.test(match) ? 'json-key' : 'json-str'; }
+      else if (/true|false/.test(match)) cls = 'json-bool';
+      return `<span class="${cls}">${match}</span>`;
+    });
+}
+
+document.getElementById('emp-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+// ── TOMTOM TRAFFIC API ──
+const TOMTOM_KEY = 'pPumk4goKkuaoqe4tKrnHRuaR07TC4US';
+let locationTraffic = {}; // stores per-location TomTom results keyed by index
+let tomtomBoost = 0;
+
+function setTTStatus(cls, text) {
+  const el = document.getElementById('tt-status');
+  el.className = 'tt-status ' + cls;
+  el.textContent = text;
+}
+
+async function callTomTomAPI() {
+  const locSelect = document.getElementById('tt-loc-select');
+  const locIdx = parseInt(locSelect.value);
+  if (isNaN(locIdx)) { alert('Please select a location first.'); return; }
+
+  const chosenLoc = baseLocations[locIdx];
+  const lat = chosenLoc.lat;
+  const lng = chosenLoc.lng;
+
+  setTTStatus('loading', '⏳ FETCHING');
+
+  // TomTom Traffic Flow Segment Data endpoint — routed through local Node server
+  const url = `http://localhost:3000/tomtom?lat=${lat}&lng=${lng}&key=${TOMTOM_KEY}`;
+
+  document.getElementById('tt-step-request').style.display = 'block';
+  document.getElementById('tt-req-display').innerHTML =
+    `<span style="color:#f472b6">GET</span> <span style="color:#a5f3fc">api.tomtom.com/traffic/services/4/flowSegmentData</span><br>`+
+    `?<span style="color:#86efac">point</span>=<span style="color:#fbbf24">${lat},${lng}</span><br>`+
+    `&<span style="color:#86efac">key</span>=<span style="color:#fbbf24">${TOMTOM_KEY.slice(0,4)}...${TOMTOM_KEY.slice(-4)}</span><br><br>`+
+    `<span style="color:var(--green);font-size:9px">📍 Fetching real traffic for: ${chosenLoc.name}</span>`;
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (!response.ok || data.detailedError) {
+      setTTStatus('error', '✗ ERROR');
+      document.getElementById('tt-step-response').style.display = 'block';
+      document.getElementById('tt-res-display').innerHTML =
+        `<span style="color:var(--red)">${data.detailedError ? data.detailedError.message : 'API Error: ' + response.status}</span>`;
+      return;
+    }
+
+    setTTStatus('success', '✓ SUCCESS');
+    document.getElementById('tt-step-response').style.display = 'block';
+
+    const fd = data.flowSegmentData;
+    const currentSpeed  = Math.round(fd.currentSpeed);
+    const freeFlowSpeed = Math.round(fd.freeFlowSpeed);
+    const currentTT     = fd.currentTravelTime;
+    const freeFlowTT    = fd.freeFlowTravelTime;
+    const confidence    = fd.confidence;
+
+    // Show raw JSON snippet
+    const snippet = {
+      currentSpeed: fd.currentSpeed,
+      freeFlowSpeed: fd.freeFlowSpeed,
+      currentTravelTime: currentTT,
+      freeFlowTravelTime: freeFlowTT,
+      confidence: confidence
+    };
+    document.getElementById('tt-res-display').innerHTML = syntaxHighlight(JSON.stringify(snippet, null, 2));
+
+    // Calculate congestion ratio: how slow vs normal (0 = free flow, 1 = standstill)
+    const ratio = freeFlowSpeed > 0 ? Math.max(0, 1 - (currentSpeed / freeFlowSpeed)) : 0;
+    const congestionPct = Math.round(ratio * 100);
+
+    let congestionLabel, congestionColor, riskBoost, congestionText;
+    if (ratio >= 0.5) {
+      congestionLabel = 'Severe'; congestionColor = 'var(--red)'; riskBoost = 15; congestionText = 'Severe';
+    } else if (ratio >= 0.3) {
+      congestionLabel = 'High';   congestionColor = 'var(--amber)'; riskBoost = 8; congestionText = 'High';
+    } else if (ratio >= 0.15) {
+      congestionLabel = 'Moderate'; congestionColor = '#f59e0b'; riskBoost = 4; congestionText = 'Moderate';
+    } else {
+      congestionLabel = 'Low / Free Flow'; congestionColor = 'var(--green)'; riskBoost = 0; congestionText = 'Low';
+    }
+
+    // Store result for this location
+    locationTraffic[locIdx] = { currentSpeed, freeFlowSpeed, congestionPct, congestionLabel, riskBoost, congestionText };
+    tomtomBoost = riskBoost;
+
+    // Show extracted data
+    document.getElementById('tt-step-extracted').style.display = 'block';
+    document.getElementById('tt-extracted-display').innerHTML =
+      `<strong>📍 ${chosenLoc.name}</strong><br>` +
+      `<span style="color:var(--muted);font-size:9px">GPS: ${lat}, ${lng}</span><br><br>` +
+      `🚗 <strong>currentSpeed</strong> → ${currentSpeed} km/h<br>` +
+      `🟢 <strong>freeFlowSpeed</strong> → ${freeFlowSpeed} km/h<br>` +
+      `📉 <strong>Congestion ratio</strong> → ${congestionPct}% slower than normal<br>` +
+      `⏱ <strong>Travel time now</strong> → ${currentTT}s (normal: ${freeFlowTT}s)<br><br>` +
+      (riskBoost > 0
+        ? `<strong style="color:var(--amber)">⚠ ${congestionLabel} congestion → risk score +${riskBoost}</strong>`
+        : `<strong style="color:var(--green)">✓ Free flow — no congestion boost</strong>`);
+
+    // Update sidebar TomTom strip
+    document.getElementById('tt-loc-name').textContent = '📍 ' + chosenLoc.name;
+    document.getElementById('tt-current-speed').textContent = currentSpeed + ' km/h';
+    document.getElementById('tt-current-speed').style.color = congestionColor;
+    document.getElementById('tt-free-speed').textContent = freeFlowSpeed + ' km/h';
+    const bar = document.getElementById('tt-congestion-bar');
+    bar.style.width = Math.min(100, congestionPct) + '%';
+    bar.style.background = congestionColor;
+    document.getElementById('tt-congestion-label').textContent = congestionLabel + ' (' + congestionPct + '% below free flow)';
+    document.getElementById('tt-boost-note').textContent = riskBoost > 0 ? `⚠ Congestion adds +${riskBoost} to risk score` : '✓ No congestion boost';
+    document.getElementById('tt-boost-note').style.color = riskBoost > 0 ? 'var(--amber)' : 'var(--green)';
+    document.getElementById('tomtom-strip').style.display = 'block';
+
+    // Update congestion field for this location and recalculate risk score
+    locations = baseLocations.map((l, i) => {
+      const w = locationWeather[i];
+      const t = locationTraffic[i];
+      const weatherB = w && w.badWeather ? 10 : 0;
+      const trafficB = t ? t.riskBoost : 0;
+      const newCongestion = t ? t.congestionLabel : l.congestion;
+      return { ...l, riskScore: Math.min(100, l.riskScore + weatherB + trafficB), congestion: newCongestion };
+    });
+
+    renderMarkers();
+    buildRiskList();
+
+    // Show TomTom row in detail panel if open
+    const ttRow = document.getElementById('d-tomtom-row');
+    ttRow.style.display = 'flex';
+    document.getElementById('d-tomtom-speed').textContent = `${currentSpeed} km/h (free flow: ${freeFlowSpeed} km/h)`;
+
+    // Fly to location
+    map.flyTo([chosenLoc.lat, chosenLoc.lng], 14, { duration: 1 });
+
+  } catch(err) {
+    setTTStatus('error', '✗ FAILED');
+    document.getElementById('tt-step-response').style.display = 'block';
+    document.getElementById('tt-res-display').innerHTML = `<span style="color:var(--red)">Network error: ${err.message}</span>`;
+  }
+}
+</script>
+</body>
+</html>
